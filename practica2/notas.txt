@@ -1,1 +1,15 @@
-pollo
+se usa API síncrona para enviar/recibir URBs: USB Request Blocks
+	enviar/recibir URBs es fácil: se usan llamadas bloqueantes
+
+
+blinkstrip
+	URB lleva un mensaje de 6 bytes:
+		0: '\x05'
+		1: 0
+		2: numero de led (0 a 7, 7 mas lejano)
+		3: componente rojo (00 a FF)
+		4: componente verde (00 a FF)
+		5: componente azul (00 a FF)
+
+
+en dmesg salen logs de "usb 1-2.2"
