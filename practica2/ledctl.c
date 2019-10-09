@@ -25,9 +25,30 @@ static inline int set_leds(struct tty_driver* handler, unsigned int mask) {
 
 SYSCALL_DEFINE1(ledctl, unsigned int, leds) {
 
-	tty_driver* kbd_driver = get_kbd_driver_handler();
+	struct tty_driver* kbd_driver = get_kbd_driver_handler();
 
-	set_leds(kbd_driver, leds);
+	// crear nueva mascara: intercambiar  valores de bits 0 y 2
+	// 0x3 = 011 => 110 = 0x6
+	// 0x1 = 001 => 100 = 0x4
+	// 0x2 = 010 => 010 = 0x2
 
-	return 0;
+	int nleds;
+
+	if (leds == 0x1) {
+		nleds = 0x4;
+	} else if (leds == 0x3) {
+		nleds = 0x6;
+	} else if (leds == 0x4) {
+		nleds = 0x1;
+	} else if (leds == 0x6) {
+		nleds = 0x3;
+	} else if (leds >= 0x0 && leds <= 0x7) {
+		nleds = leds;
+	} else {
+		printk("Error... aborting...");
+		return -1;
+	}
+
+
+	return set_leds(kbd_driver, nleds);
 }
