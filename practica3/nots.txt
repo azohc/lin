@@ -1,0 +1,14 @@
+no hay test practica 3
+
+
+1 sesion
+parte a = 
+	modificar driver para q el usiuario pueda cmaibar el estado de los leds
+
+	poner leds de cadena a color indicado, los no mencionados a negro
+	
+
+
+parte b = 
+	programa de usuario 
+
