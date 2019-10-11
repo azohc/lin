@@ -36,7 +36,7 @@ SYSCALL_DEFINE1(ledctl, unsigned int, leds) {
 	int x1 = (leds >> 1) & 0x1;
 	int x2 = (leds >> 2) & 0x1;
 
-	int nleds = (x2 << 2) | (x1 << 1) | x0;
+	int nleds = (x1 << 2) | (x2 << 1) | x0;
 
 
 	return set_leds(kbd_driver, nleds);

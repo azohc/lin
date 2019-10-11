@@ -13,10 +13,6 @@ long ledctl(unsigned int n) {
 
 int main (int argc, char *argv[]) {
 	unsigned int numb;
-	int i;
-	for (i = 0; i < argc; i++) {
-		printf("i = %d :: %s\n", i, argv[i]);
-	}
 
 	if (argc != 2) {
 		printf("Usage: ./ledctl_invoke <ledmask>\n");
