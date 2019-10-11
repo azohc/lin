@@ -7,23 +7,28 @@
 
 extern int errno ;
 
-long ledctl(void) {
-	return (long) syscall(__NR_gettid);
+long ledctl(unsigned int n) {
+	return (long) syscall(__NR_gettid, n);
 }
 
 int main (int argc, char *argv[]) {
-	char * buf;
 	unsigned int numb;
-	char * aux;
-	if (argc != 1) {
-		perror("Usage: ./ledctl_invoke <ledmask>");
+	int i;
+	for (i = 0; i < argc; i++) {
+		printf("i = %d :: %s\n", i, argv[i]);
+	}
+
+	if (argc != 2) {
+		printf("Usage: ./ledctl_invoke <ledmask>\n");
 		return -1;
-	} 
+	}
 
-	numb = strtoul(argv[0], NULL, 16);
+	numb = strtoul(argv[1], NULL, 16);
 
-	if(ledctl(numb) == -1)
-		perror("Se ha producido un error: %d", errno);
+	if(ledctl(numb) == -1) {
+		perror("Se ha producido un error" /* %d", errno*/);
+		return -1;
+	}
 	
 	return 0;
 }
