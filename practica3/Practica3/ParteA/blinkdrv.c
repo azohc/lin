@@ -110,14 +110,15 @@ static ssize_t blink_write(struct file *file, const char *user_buffer,
 			  size_t len, loff_t *off)
 {
 	struct usb_blink *dev=file->private_data;
+	char aux[BUFFER_SIZE];
 	int retval = 0, num_l;
 	int i=0, count = 0;
-	unsigned char* message;
-	static int color_cnt=0;
 	unsigned int color;
-	char * buffer,
-	char * aux;
-	char * hlp;
+	char *buffer;
+	char hlp[NR_BYTES_BLINK_MSG];
+	char *msg = NULL;
+	char *found;
+	
 
 	if (copy_from_user(aux, user_buffer, len))
 		return -1;
@@ -127,7 +128,7 @@ static ssize_t blink_write(struct file *file, const char *user_buffer,
 	
 	buffer = (char*)vmalloc(BUFFER_SIZE);
 	msg = kmalloc(NR_BYTES_BLINK_MSG, GFP_DMA);
-	strcpy(bufer, aux);
+	strcpy(buffer, aux);
 
 	if (strlen(buffer) <= 1){
 		for (i = 0; i < NR_LEDS; ++i){
@@ -164,7 +165,7 @@ static ssize_t blink_write(struct file *file, const char *user_buffer,
 		msg[5] = (color & 0xff);
 		retval = usb_control_msg(
 			dev->udev, usb_sndctrlpipe(dev->udev, 00), USB_REQ_SET_CONFIGURATION,
-			USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_DEVICE, 0X5, 0, msg, NR_BYTES_BLINK_MSG, 0)
+			USB_DIR_OUT | USB_TYPE_CLASS | USB_RECIP_DEVICE, 0X5, 0, msg, NR_BYTES_BLINK_MSG, 0);
 		if (retval < 0)
 			return -1;
 	}
