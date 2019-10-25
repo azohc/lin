@@ -21,6 +21,8 @@
 #include <linux/usb.h>
 #include <linux/mutex.h>
 #include <linux/vmalloc.h>
+#include <linux/string.h>
+
 
 MODULE_LICENSE("GPL");
 
@@ -108,36 +110,34 @@ unsigned int sample_colors[NR_SAMPLE_COLORS]={0x000000, 0x000000, 0x000000, 0x00
 /* Called when a user program invokes the write() system call on the device */
 static ssize_t blink_write(struct file *file, const char *user_buffer,
 			  size_t len, loff_t *off)
+			  
 {
 	struct usb_blink *dev=file->private_data;
-	char aux[BUFFER_SIZE];
 	int retval = 0, num_l;
 	int i=0, count = 0;
 	unsigned int color;
-	char *buffer;
-	char hlp[NR_BYTES_BLINK_MSG];
+	char *buf = (char*)kmalloc(BUFFER_SIZE+1, GFP_DMA);
+	char *hlp = (char*)vmalloc(NR_BYTES_BLINK_MSG+1);
 	char *msg = NULL;
-	char *found;
+	char *found = (char*)vmalloc(BUFFER_SIZE);
 	
-
-	if (copy_from_user(aux, user_buffer, len))
+	
+	if (copy_from_user(buf, user_buffer, len))
 		return -1;
 	
-	aux[len] = "\0";
+	buf[len] = "\0";
 	*off += len;
 	
-	buffer = (char*)vmalloc(BUFFER_SIZE);
 	msg = kmalloc(NR_BYTES_BLINK_MSG, GFP_DMA);
-	strcpy(buffer, aux);
-
-	if (strlen(buffer) <= 1){
+	
+	if (strlen(buf) <= 1 || buf == NULL){
 		for (i = 0; i < NR_LEDS; ++i){
 			sample_colors[i] = 0x000000;
 		}
 	}else{
 		//Cargar sample_colors
-		while ((found = strsep(&buffer, ",")) != NULL){
-			if (sscanf(found, "%i", num_l) == 1){
+		while ((found = strsep(&buf, ",")) != NULL){
+			if (sscanf(found, "%i", &num_l) == 1){
 				count++;
 				if (num_l < 0 || num_l > 7)
 					return -1;
@@ -154,6 +154,8 @@ static ssize_t blink_write(struct file *file, const char *user_buffer,
 	}
 	
 	memset(msg, 0, NR_BYTES_BLINK_MSG);
+	vfree(hlp);
+	vfree(found);
 	//formato
 	msg[0] = '\x05';
 	msg[1] = 0x00;
@@ -172,9 +174,10 @@ static ssize_t blink_write(struct file *file, const char *user_buffer,
 	
 	//liberar memoria
 	kfree(msg);
-	vfree(buffer);
+	kfree(buf);
 	(*off)+= len;
 	return len;
+	
 }
 
 
