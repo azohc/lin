@@ -182,6 +182,7 @@ static ssize_t module_read(struct file *filp, char __user *buf, size_t len, loff
         trace_printk("\n[m0dLiSt] list empty\n");
     } else {
         trace_printk("\n[m0dLiSt] %d bytes in string(list):\n%s", nr_bytes, buffer);
+        return EINVAL;
     }
 
 

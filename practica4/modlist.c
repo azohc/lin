@@ -13,20 +13,17 @@ MODULE_AUTHOR("Pablo Jimenez Cruz & Juan Chozas Sumbera");
 DEFINE_SPINLOCK(sp);
 
 #define BUFFER_LENGTH (PAGE_SIZE / 4)
+#define MAX_BUFF_SIZE 257
+
 
 static struct proc_dir_entry *proc_entry;
 static struct list_head the_list;
-
-static int nr_elems = 0;    // numero de elementos de la lista
-static int nr_digits = 0;   // numero de digitos de todos los elementos de la lista
-
 
 struct list_item {
     struct list_head links;
     int data;
 };
 
-// dado un entero, devuelve cuantos digitos tiene
 int digits(int n) {
 
     int d = 1;
@@ -51,11 +48,8 @@ void add_to_the_list(int n) {
         
     spin_lock(&sp);                                            // asignar dato
     list_add_tail(&item->links, &the_list);                        // añadir al final de la lista
-
-    nr_digits += digits(n); // actualizar contadores
-    nr_elems++;
     spin_unlock(&sp);
-    trace_printk("\n[m0dLiSt] add: added %d to the list\n%d elems, %d digits\n", n, nr_elems, nr_digits);
+    trace_printk("\n[m0dLiSt] add: added %d to the list\n", n);
 }
 
 
@@ -71,17 +65,16 @@ void remove_from_the_list(int n) {
     list_for_each_safe(cur_node, aux, &the_list) {
         item = list_entry(cur_node, struct list_item, links);
         if (item->data == n) {
+            nr_dels++;
             list_del(cur_node);     // borrar nodo de la lista
             vfree(item);            // liberar memoria del nodo
-            nr_dels++;              // actualizar contadores
-            nr_digits -= digits(n); 
-            nr_elems--;
         }
     }
 
     spin_unlock(&sp);
-    trace_printk("\n[m0dLiSt] remove: removed %d %d's from the list\n%d elems, %d digits\n", nr_dels, n, nr_elems, nr_digits);
+    trace_printk("\n[m0dLiSt] remove: removed %d %d's from the list\n", nr_dels, n);
 }
+
 
 
 // vacía la lista
@@ -93,21 +86,18 @@ void cleanup_the_list(void) {
 
     spin_lock(&sp);
 
-    if (!list_empty(&the_list)) {
-        list_for_each_safe(cur_node, aux, &the_list) {
-            item = list_entry(cur_node, struct list_item, links);
-            nr_dels++;
-            nr_digits -= digits(item->data); // actualizar contadores
-            nr_elems--;
-            trace_printk("\n[m0dLiSt] cleanup: removed %d -%d digits\n", item->data, digits(item->data));
-            list_del(cur_node);
-            vfree(item);
-        }
-
-        trace_printk("\n[m0dLiSt] cleanup: %d items deleted\n%d elems, %d digits\n", nr_dels, nr_elems, nr_digits);
+    list_for_each_safe(cur_node, aux, &the_list) {
+        item = list_entry(cur_node, struct list_item, links);
+        nr_dels++;
+        trace_printk("\n[m0dLiSt] cleanup: removed %d -%d digits\n", item->data, digits(item->data));
+        list_del(cur_node);
+        vfree(item);
     }
 
-    
+    trace_printk("\n[m0dLiSt] cleanup: %d items deleted\n", nr_dels);
+
+
+     spin_unlock(&sp);
 }
 
 
@@ -117,13 +107,17 @@ char* write_list(char* dest) {
     char* pnt = dest;
     struct list_item *item = NULL;
     struct list_head *cur_node = NULL;
+    int nr_byter = 0;
 
     // escribir elementos en dest
     list_for_each(cur_node, &the_list) {
         item = list_entry(cur_node, struct list_item, links);
-        pnt += sprintf(pnt, "%d\n", item->data);
+        nr_byter += digits(item->data) + 1;
+        if (nr_byter <= MAX_BUFF_SIZE)
+            pnt += sprintf(pnt, "%d\n", item->data);
+        else
+            return NULL;
     }
-
     return pnt;
 }
 
@@ -168,7 +162,7 @@ static ssize_t module_write(struct file *filp, const char __user *buf, size_t le
         trace_printk("\n[m0dLiSt:ERROR] could not parse command\n");
     }
 
-    spin_unlock(&sp);
+
     
     return len;
 }
@@ -182,10 +176,17 @@ static ssize_t module_read(struct file *filp, char __user *buf, size_t len, loff
         return 0;
 
     // cantidad de digitos en la lista + un salto de linea por cada elem
-    char buffer[nr_digits + nr_elems]; 
+    char buffer[MAX_BUFF_SIZE]; 
 
+    spin_lock(&sp);
     // copiar lista al buffer
     char *pnt = write_list(buffer);
+    if (pnt == NULL){
+        return -ENOSPC;
+    }
+
+    spin_unlock(&sp);
+
 
     // restar punteros para hallar cantidad de bytes escritos a buffer
     nr_bytes = pnt - buffer;

@@ -21,4 +21,4 @@ consumidor() {
 
 productor $1 &
 consumidor $1 &
-wait $(jobs -p)
+wait 
