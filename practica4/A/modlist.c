@@ -44,11 +44,12 @@ int digits(int n) {
 // añade un entero a la lista
 void add_to_the_list(int n) {
     struct list_item *item = vmalloc(sizeof(struct list_item));    // reserva memoria para struct list_item
-    item->data = n;
-        
+    
     spin_lock(&sp);                                            // asignar dato
+    item->data = n;
     list_add_tail(&item->links, &the_list);                        // añadir al final de la lista
     spin_unlock(&sp);
+    
     trace_printk("\n[m0dLiSt] add: added %d to the list\n", n);
 }
 
@@ -93,11 +94,9 @@ void cleanup_the_list(void) {
         list_del(cur_node);
         vfree(item);
     }
-
-    trace_printk("\n[m0dLiSt] cleanup: %d items deleted\n", nr_dels);
-
-
      spin_unlock(&sp);
+     
+     trace_printk("\n[m0dLiSt] cleanup: %d items deleted\n", nr_dels);
 }
 
 
@@ -134,12 +133,15 @@ static ssize_t module_write(struct file *filp, const char __user *buf, size_t le
         trace_printk("\n[m0dLiSt:ERROR] not enough space for writing\n");
         return -ENOSPC;
     }
-
+	
+	spin_lock(&sp);
     // transfer data from user to kernel space
     // copy_from_user(void* to, const void __user* from, unsigned long bytes_to_copy)
     if (copy_from_user(buffer, buf, len))
         return -EFAULT;
 
+	spin_unlock(&sp);
+	
     buffer[len] = '\0'; // Add the `\0' to convert to string
     *off += len;
 
