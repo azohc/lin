@@ -25,35 +25,134 @@ int nr_prod_waiting=0; /* Número de procesos productores esperando */
 int nr_cons_waiting=0; /* Número de procesos consumidores esperando */
 
 
-void fifoproc_open(bool abre_para_lectura) {
+static int fifoproc_open(struct inode *inode, struct file *file) {
 
-	lock(mtx);
-	if (abre_para_lectura)
+	if(down_interruptible(&mtx))
+		return -1;
+		
+	if (file->f_mode & FMODE_READ)
 	{
 	/* Un consumidor abrió el FIFO */
+		if(cons_count > 0) {up(&mtx); return -1;}
 		cons_count++;
-		cond_signal(prod, mtx);
-		while (!prod_count) {
-			cond_wait(cons, mtx);
+		if(nr_prod_waiting > 0) {up(&sem_prod); nr_prod_waiting--; }
+		while (prod_count < 1) {
+			nr_cons_waiting++;
+			up(&mtx);
+			if(down_interruptible(&sem_cons)){
+				down(&mtx);
+				nr_cons_waiting--;
+				up(&mtx);
+				return -1;
+			} 
+			if(down_interruptible(&mtx)){
+				nr_cons_waiting--;
+				return -1;
+			}
 		} 
 	} else {
 	/* Un productor abrió el FIFO */
+		if(prod_count > 0){up(&mtx); return -1;}
 		prod_count++;
-		cond_signal(cons, mtx);
-		while (!cons_count) {
-			cond_wait(prod, mtx);
+		if(nr_cons_waiting > 0){up(&sem_cons); nr_cons_waiting--;}
+		while (cons_count < 1) {
+			nr_prod_waiting++;
+			up(&mtx);
+			if(down_interruptible(&sem_prod)){
+				down(&mtx);
+				nr_prod_waiting--;
+				up(&mtx);
+				return -1;
+			} 
+			if(down_interruptible(&mtx)){
+				nr_prod_waiting--;
+				return -1;
+			}
 		}
 	}
-	unlock(mtx);
+	up(&mtx);
+	return 0;
 }
 
-// Productores
-int fifoproc_write(char* buff, int len) {
-
-	char kbuffer[MAX_KBUF];
+static int fifoproc_release(struct inode *inode, struct file *file) {
+	if(down_interruptible(&mtx))
+		return -1;
 	
-	if (len > MAX_CBUFFER_LEN || len > MAX_KBUF) { return Error;}
-	if (copy_from_user(kbuffer, buff, len)) { return Error;}
+	if(file->f_mode & FMODE_READ){
+		cons_count--;
+		if( nr_prod_waiting > 0){
+			nr_prod_waiting--;
+			up(&sem_prod);
+		}
+	} else {
+		prod_count--;
+		if( nr_prod_waiting > 0){
+			nr_prod_waiting--;
+			up(&sem_prod);
+		}
+	}
+	if(cons_count + prod_count == 0)
+			kfifo_reset(&cbuffer);
+	up(&mtx);
+	return 0;
+}
+
+
+// Consumidores
+static ssize_t fifoproc_read(struct file *file, char __user *buf, size_t len, loff_t *off) {	
+
+	char kbuffer[MAX_FIFO_BUF];
+
+	if (len > MAX_FIFO_BUF || len > MAX_FIFO_BUF) { return -1;}
+	
+	if(down_interruptible(&mtx))
+		return -1;
+	
+	/* Esperar hasta que haya datos que consumir (debe haber productores) */
+	while (kfifo_len(&cbuffer) < len && prod_count > 0) {
+		nr_cons_waiting++;
+		up(&mtx);
+		if(down_interruptible(&sem_cons)){
+			down(&mtx);
+			nr_cons_waiting--;
+			up(&mtx);
+			return -1;
+		}
+		if(down_interruptible(&mtx)){
+			nr_cons_waiting--;
+			return -1;
+		}
+		
+	}
+	
+	/* Detectar fin de comunicación por error (consumidor cierra FIFO antes) */
+	if (prod_count == 0 && kfifo_is_empty(&cbuffer)) {up(&mtx); return -EPIPE;}
+	
+	kfifo_out(&cbuffer, kbuffer, len);
+	
+	/* Despertar a posible productor bloqueado */
+	if( nr_prod_waiting > 0){
+		up(&sem_prod);
+		nr_prod_waiting--;
+	}
+	
+	if (copy_to_user(buf, kbuffer, len)) { return -1;}
+	
+	
+	up(&mtx);
+	
+	return len;
+
+}
+
+
+// Productores
+static ssize_t fifoproc_write(struct file *file, const char __user *buf, size_t len, loff_t *off) {
+
+	char kbuffer[MAX_FIFO_BUF];
+	
+	if (len > MAX_FIFO_BUF || len > MAX_FIFO_BUF) { return -1;}
+	if (copy_from_user(kbuffer, buf, len)) { return -1;}
 	
 	if(down_interruptible(&mtx))
 		return -1;
@@ -68,7 +167,7 @@ int fifoproc_write(char* buff, int len) {
 			up(&mtx);
 			return -1;
 		}
-		if(down_interruptible(&mtx){
+		if(down_interruptible(&mtx)){
 			nr_prod_waiting--;
 			return -1;
 		}
@@ -91,71 +190,12 @@ int fifoproc_write(char* buff, int len) {
 
 }
 
-// Consumidores
-int fifoproc_read(const char* buff, int len) {	
 
-	char kbuffer[MAX_KBUF];
-
-	if (len > MAX_CBUFFER_LEN || len > MAX_KBUF) { return Error;}
-	
-	lock(mtx);
-	
-	/* Esperar hasta que haya datos que consumir (debe haber productores) */
-	while (kfifo_len(&cbuffer) < len && prod_count > 0) {
-		nr_cons_waiting++;
-		up(&mtx);
-		if(down_interruptible(&sem_cons)){
-			down(&mtx);
-			nr_cons_waiting--;
-			up(&mtx);
-			return -1;
-		}
-		if(down_interruptible(&mtx)){
-			nr_cons_waiting--;
-			return -1;
-		}
-		
-	}
-	
-	/* Detectar fin de comunicación por error (consumidor cierra FIFO antes) */
-	if (prod_count == 0 && kfifo_is_empty(&cbuffer)) {up(mtx); return -EPIPE;}
-	
-	kfifo_out(&cbuffer, kbuffer, len);
-	
-	/* Despertar a posible productor bloqueado */
-	if( nr_prod_waiting > 0){
-		up(&sem_prod);
-		nr_prod_waiting--;
-	
-	if (copy_to_user(buff, kbuffer, len)) { return Error;}
-	
-	
-	up(mtx);
-	
-	return len;
-
-}
-void fifoproc_release(bool lectura) {
-	lock(mtx);
-	if(lectura){
-		if(kfifo_is_empty(&cbuffer))
-			kfifo_reset();
-		cons_cont--;
-		cond_signal(prod);
-	} else {
-		if(kfifo_is_free(&cbuffer))
-			kfifo_reset();
-		prod_count--;
-		cond_signal(cons);
-	}}
-	unlock(mtx);
-}
-
-static const file_operations proc_entry_fops = {
+static const struct file_operations proc_entry_fops = {
 	.open = fifoproc_open,
-	.write = fifoproc_write,
-	.read = fifoproc_read,
 	.release = fifoproc_release,
+	.read = fifoproc_read,
+	.write = fifoproc_write,
 };
 
 int init_fifo_module(void){
@@ -178,11 +218,10 @@ int init_fifo_module(void){
 	return aux;
 }
 
-int exit_fifo_module(void){
+void exit_fifo_module(void){
 	kfifo_reset(&cbuffer);
 	kfifo_free(&cbuffer);
 	remove_proc_entry("fifo", NULL);
-	return 0;
 }
 
 module_init(init_fifo_module);
