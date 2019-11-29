@@ -80,14 +80,16 @@ static int fifoproc_release(struct inode *inode, struct file *file) {
 	
 	if(file->f_mode & FMODE_READ){
 		cons_count--;
-		if( nr_prod_waiting > 0){
-			nr_prod_waiting--;
+		if( nr_cons_waiting > 0){
+			nr_cons_waiting--;
+			cons_count++;
 			up(&sem_prod);
 		}
 	} else {
 		prod_count--;
 		if( nr_prod_waiting > 0){
 			nr_prod_waiting--;
+			prod_count--;
 			up(&sem_prod);
 		}
 	}
