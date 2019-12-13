@@ -1,0 +1,11 @@
+#! /usr/bin/env stap 
+
+probe oneshot { 
+	println("juanshot");
+}
+probe begin { 
+	println("begin world");
+}
+
+# $ sudo stap order.stp
+# que mensaje se imprime?
