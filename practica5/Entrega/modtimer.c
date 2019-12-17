@@ -16,9 +16,11 @@
 #define MAX_LIST_TAM			256					/* Max struct list_head tam */ 
 #define SUCCESS					0					/* For return */
 
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("JAIME SAEZ DE BURUAGA");
+MODULE_DESCRIPTION("LIN - P5");
 
-
-/*------------------------- Global Variables -------------------------*/
+	/*------------------------- Global Variables -------------------------*/
 struct timer_list my_timer; 						/* Structure that describes the kernel timer */
 
 struct kfifo cbuffer;								/* Cyclic buffer */
