@@ -17,10 +17,8 @@
 #define SUCCESS					0					/* For return */
 
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("JAIME SAEZ DE BURUAGA");
-MODULE_DESCRIPTION("LIN - P5");
 
-	/*------------------------- Global Variables -------------------------*/
+/*------------------------- Global Variables -------------------------*/
 struct timer_list my_timer; 						/* Structure that describes the kernel timer */
 
 struct kfifo cbuffer;								/* Cyclic buffer */
@@ -44,14 +42,9 @@ static struct list_head myList;						/* Linked list */
 struct list_item {
 	int data;
 	struct list_head links;
-};													/* List item */
+};	
 
-
-/* PARA PARTE OPCIONAL */
-//static struct list_head myList_impares;
-//struct semaphore module_wqueue;						/* process waiting to start (max 1) */
-//unsigned int nr_proc_waiting;						/* must be 2 to start (par & impar) */
-
+											/* List item */
 
 /*------------------------------ IMPLEMENTATION ------------------------------*/
 static void add_to_list(int dato){
@@ -97,10 +90,6 @@ static void copy_items_into_list( void ){
 	kfifo_reset(&cbuffer); 	//ESPECIFICACION: vacía buffer
 	spin_unlock_irqrestore(&buffer_sp, buffer_flags);
 
-	/* No hacemos down(&list_mtx) porque se hace en add_to_list */
-
-		/* Now I've kfifo in aux[] */
-
 	down(&list_mtx);/* Aquí el cerrojo en vez de dentro de add_to_list() */
 						    /* para no partir la SECCION CRITICA */
 
@@ -137,13 +126,7 @@ static void fire_timer(unsigned long data)
 	printk(KERN_INFO "Insertando %u en el buffer\n", random);
 
 	if(((kfifo_len(&cbuffer) * 100)/ kfifo_size(&cbuffer)) >= emergency_treeshold){
-
-			// ¿HAY AQUI INTERBLOQUEO?
-		
 		queue_work(my_wq, &my_work);
-		/* No se debe planificar la tarea diferida hasta que no se haya
-		   completado la ejecución de la última tarea planificada y el
-		   umbral de emergencia se vuelva a alcanzar */
 	}
 
 	spin_unlock_irqrestore(&buffer_sp, buffer_flags);	// AQUI O ANTES??
@@ -155,7 +138,7 @@ static void fire_timer(unsigned long data)
 /*******************************************	 MODTIMER      *******************************************/
 static int modtimer_open(struct inode *inode, struct file *file){
 	try_module_get(THIS_MODULE);
-	add_timer(&my_timer);		// Falla aqui??
+	add_timer(&my_timer);	
 	return SUCCESS;
 }
 
@@ -166,12 +149,11 @@ static int modtimer_release(struct inode *inode, struct file *file){
 	flush_workqueue(my_wq);
 		/* KFIFO */
 	kfifo_reset(&cbuffer);	
+		/* LINKED LIST */
+	cleanup_list();
 		/* MODULE KREF */
 	module_put(THIS_MODULE);
-		/* LINKED LIST */
-	cleanup_list();	// 0     -> SUCCESS
-							// o.w.  -> EINTR
-	return 0;
+	return SUCCESS;
 }
 
 static int read_and_remove_from_list(char *kbuf){
@@ -274,7 +256,9 @@ static ssize_t modconf_read(struct file *file, char __user *buf, size_t len, lof
 static ssize_t modconf_write(struct file *file, const char __user *buf, size_t len, loff_t *off){
 	int available_space = MAX_CONF_BUFF - 1;
 	char kbuf[MAX_CONF_BUFF];
-	int length;
+	int nuevo_timer_period_ms;
+    int nuevo_emergency_threshold;
+    int nuevo_max_random;
 
 	if((*off) > 0)
 		return 0;
@@ -289,17 +273,23 @@ static ssize_t modconf_write(struct file *file, const char __user *buf, size_t l
 	kbuf[len] = '\0';
 	*off+=len;
 
-	length = 0;
-	if((length = sscanf(kbuf, "timer_period_ms=%lu", &timer_period_ms)) == 1)
-		;
-	
-	if((length = sscanf(kbuf, "emergency_treeshold=%lu", &emergency_treeshold)) == 1)
-		;
-
-	if((length = sscanf(kbuf, "max_random=%lu", &max_random)) == 1)
-		;
-
-	return len;	// ¿LEN y no LENGTH?
+	 //Parseamos la entrada
+    if(sscanf(kbuf,"timer_period_ms %lu",&nuevo_timer_period_ms) == 1) {
+        timer_period_ms = nuevo_timer_period_ms;
+        printk(KERN_INFO "Modconfig: El nuevo timer_period_ms es: %lu\n", nuevo_timer_period_ms);
+    }
+    else if(sscanf(kbuf,"emergency_threshold %lu", &nuevo_emergency_threshold) == 1) {
+        emergency_treeshold = nuevo_emergency_threshold;
+        printk(KERN_INFO "Modconfig: El nuevo emergency_threshold es: %lu\n", emergency_treeshold);
+    }
+    else if(sscanf(kbuf,"max_random %lu", &nuevo_max_random) == 1) {
+        max_random = nuevo_max_random;
+        printk(KERN_INFO "Modconfig: El nuevo max_random es: %lu\n", max_random);
+    }
+    else {
+        return -EINVAL;
+    }
+	return len;	
 }
 
 static const struct file_operations proc_conf_fops = {
