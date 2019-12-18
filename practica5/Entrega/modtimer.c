@@ -231,10 +231,13 @@ static ssize_t modconf_read(struct file *file, char __user *buf, size_t len, lof
 		return 0;
 
 	length = 0;
+
 	listString += sprintf(listString, "timer_period_ms=%lu\n", timer_period_ms);
 	printk(KERN_INFO "timer_period_ms=%lu", timer_period_ms);
+
 	listString += sprintf(listString, "emergency_treeshold=%lu\n", emergency_treeshold);
 	printk(KERN_INFO "emergency_treeshold=%lu", emergency_treeshold);
+	
 	listString += sprintf(listString, "max_random=%lu\n", max_random);
 	printk(KERN_INFO "max_random=%lu", max_random);
 
@@ -304,7 +307,7 @@ int init_modtimer_module ( void ){
 	proc_conf_entry = proc_create_data("modconf", 0666, NULL, &proc_conf_fops, NULL);
 	if(proc_conf_entry == NULL)
 	{
-		printk(KERN_INFO "MODCONF: Cannot allocate mamory for /proc configuration entry\n");
+		printk(KERN_INFO "MODCONF: Cannot allocate memory for /proc configuration entry\n");
 		ret = -ENOMEM; /* Not Enough Memory */
 		goto out_error;
 		
